@@ -938,7 +938,7 @@ void ikbd_writeb(UBYTE b)
     KDEBUG(("ikbd_writeb(0x%02x)\n", (UBYTE)b));
 
     while (!bcostat4());
-#if CONF_WITH_IKBD_ACIA
+#if CONF_WITH_IKBD_ACIA && !defined (MACHINE_AMIGA)
     ikbd_acia.data = b;
 #elif CONF_WITH_FLEXCAN
     coldfire_flexcan_ikbd_writeb(b);
