@@ -1228,7 +1228,14 @@ void amiga_setphys(const UBYTE *addr)
 {
     KDEBUG(("amiga_setphys(%p)\n", addr));
 #if CONF_WITH_APOLLO_68080
-    SAGA_SET_VIDEO_PHYSBASE = (ULONG)addr;
+    if(((ULONG) addr) < 0x01000000UL)
+    {
+        *(volatile UBYTE *) VIDEOBASE_ADDR_HI = ((ULONG) addr) >> 16;
+        *(volatile UBYTE *) VIDEOBASE_ADDR_MID = ((ULONG) addr) >> 8;
+        *(volatile UBYTE *) VIDEOBASE_ADDR_LOW = ((ULONG) addr);
+    }
+    else
+        SAGA_SET_VIDEO_PHYSBASE = (ULONG)addr;
 #else
     amiga_screenbase = addr;
 #endif
