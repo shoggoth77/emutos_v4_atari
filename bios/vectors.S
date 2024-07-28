@@ -349,7 +349,7 @@ _int_vbl:
 
         jsr     _blink                  // blink cursor
 
-#if CONF_WITH_ATARI_VIDEO
+#if CONF_WITH_ATARI_VIDEO || CONF_WITH_APOLLO_68080
 // the contents of colorptr indicate the palette processing required; since
 // the source address must be on a word boundary, we use bit 0 as a flag:
 //  contents                 meaning
@@ -375,6 +375,33 @@ _int_vbl:
         jne     docopy                      // yes, go update 16
         move.l  #_falcon_shadow_palette,d0  // else set source address
         move.l  #255,d1                     //  & prepare to update 256
+docopy:
+#elif CONF_WITH_APOLLO_68080
+        jeq     docopy                      // wasn't set, so update STe regs
+        // load SAGA color palette (Falcon format)
+        lea     0xdff388,a1                 // SAGA palette registers
+        moveq   #15,d1                      // assume 16 only
+        tst.l   d0                          // source address specified?
+        jne     docopysaga                  // yes, go update 16
+        move.l  #_saga_shadow_palette,d0    // else set source address
+        move.l  #255,d1                     //  & prepare to update 256
+
+docopysaga:
+        clr.l   d3
+        move.l  d0,a0                       // a0 -> source
+vbl_saga_palette_loop:
+        move.l  (a0)+,d2   | RRRg RRRg GGGb GGGb 0000 0000 BBBb BBBb
+
+        // convert Falcon format -> SAGA
+        lsl.w #8,d2        | RRRg RRRg GGGb GGGb BBBb BBBb 0000 0000
+        lsr.l #8,d2        | 0000 0000 RRRg RRRg GGGb GGGb BBBb BBBb
+
+        or.l    d3,d2
+        move.l  d2,(a1)
+        add.l   #0x01000000,d3
+        dbra    d1,vbl_saga_palette_loop
+
+        bra.s vbl_no_palette
 docopy:
 #endif
         move.l  d0,a0                       // a0 -> source
@@ -404,7 +431,14 @@ vbl_no_palette:
         tst.w   _has_ste_shifter
         jne     set_video_low
 #endif
-#if CONF_WITH_VIDEL || CONF_WITH_TT_SHIFTER || CONF_WITH_STE_SHIFTER
+#if CONF_WITH_APOLLO_68080
+        cmp.l   #0x01000000,d0
+        blt.s   set_video_low
+
+        move.l  d0,0xdff1ec | SAGA physbase set
+        bra.s   vbl_no_screenpt
+#endif
+#if CONF_WITH_VIDEL || CONF_WITH_TT_SHIFTER || CONF_WITH_STE_SHIFTER || CONF_WITH_APOLLO_68080
         jra     st_shifter
 set_video_low:
         move.b  d0,0xffff820d.w
@@ -421,71 +455,7 @@ st_shifter:
 #endif
         move.b  d0,0xffff8201.w
 vbl_no_screenpt:
-#endif /* CONF_WITH_ATARI_VIDEO */
-
-#if CONF_WITH_APOLLO_68080
-        move.l  _colorptr.w,d0
-        jeq     vbl_palette_done
-
-        // load new color palette
-        clr.l   _colorptr.w
-        bclr    #0,d0                       // test & clear Falcon indicator
-        jne     formatf                     // set; update using Falcon format
-
-        // load "STE" color palette
-        clr.l   d3
-        move.l  d0,a0                       // a0 -> source
-        moveq   #15,d1                      // 16 colors
-vbl_palette_loopste:
-        move.w  (a0)+,d2 | 0000 rRRR gGGG bBBB
-
-        // move STE LSB bit to top position
-        move.w  d2,d4
-        and.w   #0x777,d2
-        and.w   #0x888,d4
-        lsl.w   #1,d2
-        lsr.w   #3,d4
-        or.w    d2,d4 | 0000 RRRr GGGg BBBb
-
-        // Convert 12-bit format -> SAGA
-        bfins   d4,d2{0:16} | 0000 RRRg GGGb BBBb ---- ---- ---- ----
-        bfins   d4,d2{8:12} | 0000 RRRg RRRg GGGb BBBb ---- ---- ----
-        bfins   d4,d2{16:8} | 0000 RRRg RRRg GGGb GGGb BBBb ---- ---- 
-        bfins   d4,d2{24:4} | 0000 RRRg RRRg GGGb GGGb BBBb BBBb ---- 
-        lsr.l   #4,d2       | 0000 0000 RRRg RRRg GGGb GGGb BBBb BBBb
-
-        or.l    d3,d2
-        move.l  d2,0xdff388
-        add.l   #0x01000000,d3
-        dbra    d1,vbl_palette_loopste
-
-        bra.s   vbl_palette_done
-
-formatf:
-        // load "Falcon" color palette
-        moveq   #15,d1                      // assume 16 only
-        tst.l   d0                          // source address specified?
-        jne     docopyf                     // yes, go update 16
-        move.l  #_saga_shadow_palette,d0    // else set source address
-        move.l  #255,d1                     //  & prepare to update 256
-docopyf:
-        clr.l   d3
-        move.l  d0,a0                       // a0 -> source
-vbl_palette_loopf:
-        move.l  (a0)+,d2   | RRRg RRRg GGGb GGGb 0000 0000 BBBb BBBb
-
-        // convert Falcon format -> SAGA
-        lsl.w #8,d2        | RRRg RRRg GGGb GGGb BBBb BBBb 0000 0000
-        lsr.l #8,d2        | 0000 0000 RRRg RRRg GGGb GGGb BBBb BBBb
-
-        or.l    d3,d2
-        move.l  d2,0xdff388
-        add.l   #0x01000000,d3
-        dbra    d1,vbl_palette_loopf
-
-vbl_palette_done:
-
-#endif /* CONF_WITH_APOLLO_68060 */
+#endif /* CONF_WITH_ATARI_VIDEO  || CONF_WITH_APOLLO_68080 */
 
 #if CONF_WITH_FDC
         // flopvbl
