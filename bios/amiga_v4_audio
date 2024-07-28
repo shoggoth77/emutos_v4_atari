@@ -1,0 +1,23 @@
+move.l        #audiodata,$DFF400        ; poke ptr
+    move.l        #audiolength,$DFF404    ; length is counted in sample pairs (8byte)
+    move.w        #$FFFF,$DFF408            ; volume both side max
+    move.w         #80,$DFF40C               ; some period roughly 44khz - please correct :slight_smile:
+move.w        #$0005,$DFF40A            ; 16 bit stereo interleaved (with loop mode)
+move.w        #$8001,$DFF096            ; enable audio channle0 , DMA = PLAY
+
+
+
+AUDCTRL ($DFF40A)
+
+         16bit Audio CONTROL Register
+
+         +-------+----------+-------------------------------------------+
+         | BIT# | FUNCTION | DESCRIPTION                               |
+         +-------+----------+-------------------------------------------+
+         | 2    | Stereo   | 16bit/16bit interleaved mode - 64bit align |
+         | 1    | OneShot  | Channel will turn itself off at sample end |
+         | 0    | 16bit    | 0=8bit, 1=16bit samples                    |
+         +-------+----------+-------------------------------------------+
+
+
+
