@@ -39,6 +39,7 @@
 
         .globl  _joy0_report
         .globl  _joy1_report
+        .globl  _joy_monitor
 
         .extern _play_int_ch0
         .extern _sound_int_call
@@ -594,8 +595,11 @@ noclipymax:
         move.l _mouse_report_mv,a1
 
 no_movement:
-        move.w 0xdff016,d0
-        move.b 0xbfe001,d0
+        move.b   0xbfe001,d0 | joystick 1 fire button at bit 7
+        lsl.w    #3,d0
+        and.w    0xdff016,d0 | right mouse button at bit 10
+        move.b   0xbfe001,d0 | left mouse button at bit 6
+
         and.w  #0x0440,d0
         move.w _oldbuttons,d1
 
@@ -649,6 +653,24 @@ no_buttons:
         jsr (a0)
         move.l _joy1_report,a0
         jsr (a0)
+        move.l _joy_monitor,a0
+        jsr (a0)
+        move.l _joy_interrogate,a0
+        jsr (a0)
+        rts
+
+buttons: |; this code isn't used yet. Idea is:
+         |; - consolidate all button crap to here so
+         |;   that right mouse button + joy1 fire is one and the same.
+
+        move.b   0xbfe001,d0 | b6 = left mouse button, fire button joy 0
+        lsl.w    #2,d0       
+        move.b   0xdff016,d0 | b2 = right mouse button
+        lsl.b    #5,d0
+        and.b    0xbfe001,d0 | b7 = fire button joy 0
+
+        lsr.w    #1,d0
+        eor.b    #0xc0,d0
 
         rts
 
@@ -729,105 +751,136 @@ _mouse_report_0xf5:
 _mouse_report_none:
         rts
 
+        .globl _joy_interrogate_on
+_joy_interrogate_on:
+        move.l #_joy_interrogate_off,_joy_interrogate |; execute once
+
+        move.b   #0xfd,d0
+        jsr      acia_ikbd_rx
+
+        btst     #6,0xbfe001 |; joystick 0 button
+        seq      d1
+        and.b    #0x80,d1
+
+        move.w   0xdff00a,d0
+        jbsr     joydir
+        or.b     d1,d0
+        jsr      acia_ikbd_rx
+
+        move.b   0xdff016,d1  |; right mouse button at bit 2
+        lsl.b    #5,d1
+        and.b    0xbfe001,d1  |; joystick 1 button
+        and.b    #0x80,d1
+        eor.b    #0x80,d1
+
+        move.w   0xdff00c,d0
+        jbsr     joydir
+        or.b     d1,d0
+        jsr      acia_ikbd_rx
+
+        rts
+
+        .globl _joy_monitor_on
+_joy_monitor_on:
+        move.b   0xbfe001,d0  |; joystick 0/1 buttons
+        move.b   0xdff016,d2  |; right mouse button at bit 2
+        lsl.b    #5,d2
+        and.b    d0,d2        |; joystick 1 button
+
+        btst     #6,d0        |; joystick 0 button
+        seq      d0
+        add.w    d0,d0
+
+        btst     #7,d2
+        seq      d0
+        add.w    d0,d0
+
+        rol.w    #8,d0
+        and.b    #3,d0
+
+        jbsr     acia_ikbd_rx |; report buttons
+
+        move.w   0xdff00a,d0
+        jbsr     joydir
+        move.b   d0,d1
+
+        move.w   0xdff00c,d0
+        jbsr     joydir
+
+        lsl.b    #4,d1
+        or.b     d1,d0
+
+        jbsr     acia_ikbd_rx |; report directions
+        rts
+
+joydir: ror.b    #2,d0
+        lsr.w    #6,d0
+        and.w    #0xf,d0
+        move.b   conv(pc,d0.w),d0
+        rts
+
+conv:   dc.b     0, 2, 10, 8, 1, 0, 8, 9, 5, 4, 0, 1, 4, 6, 2, 0
+
         .extern _oldjoy0dat
         .extern _oldjoy1dat
 
         .globl _joy0_report_event
 _joy0_report_event:
-        move.w 0xdff00a,d2 | JOY0DAT 
+        btst     #6,0xbfe001
+        seq      d2
+        and.b    #0x80,d2
 
-        move.b 0xbfe001,d1 | CIAAPRA
-        lsl.b #1,d1
-        and.b #0x80,d1
+        move.w   0xdff00a,d0
+        jbsr     joydir
 
-        cmp.w _oldjoy0dat,d2
-        jbne dojoy0
-       
-        cmp.b _oldjoy0dat+2,d1
-        jbeq joydone
+        or.b     d0,d2     
 
-dojoy0: move.w d2,_oldjoy0dat
-        move.b d1,_oldjoy0dat+2
+        cmp.b    _oldjoy0dat,d2
+        jbeq     joy0done
 
-        eor.b #0x80,d1
+        move.b   d2,_oldjoy0dat
 
-        move.w d2,d0
-        lsl.w #1,d0
-        eor.w d2,d0
+        move.b   #0xff,d0
+        jbsr     acia_ikbd_rx
 
-        and.b #2,d0     | JOYxDAT 1 XOR 0, down -> IKBD 1, down
-        and.b #2,d2     | JOYxDAT 1, right -> ...
-        lsl.b #2,d2     |              ... -> IKBD 3, right
-        or.b  d0,d1
-        or.b  d2,d1
-
-        rol.w #7,d0
-        and.b #1,d0     | JOYxDAT 9 XOR 8, up -> IKBD 0, up
-        or.b  d0,d1
-
-        ror.w #7,d2
-        and.b #4,d2     | JOYxDAT 9, left -> IKBD 2, left
-        or.b d2,d1
-        move.b d1,d2
-
-        move.b #0xfe,d0
-        jsr acia_ikbd_rx
-
-        move.b d2,d0
-        jsr acia_ikbd_rx
-
-joydone:
+        move.b   d2,d0
+        jbsr     acia_ikbd_rx   
+joy0done:
         rts
 
         .globl _joy1_report_event
 _joy1_report_event:
-        move.w 0xdff00c,d2 | JOY1DAT 
+        move.b   0xdff016,d2  |; right mouse button at bit 2
+        lsl.b    #5,d2
+        and.b    0xbfe001,d2  |; joystick 1 button
+        and.b    #0x80,d2
+        eor.b    #0x80,d2
 
-        move.b 0xbfe001,d1 | CIAAPRA
-        and.b #0x80,d1
+        move.w   0xdff00c,d0
+        jbsr     joydir
 
-        cmp.w _oldjoy1dat,d2
-        jbne dojoy1
-       
-        cmp.b _oldjoy1dat+2,d1
-        jbeq joydone
+        or.b     d0,d2     
 
-dojoy1: move.w d2,_oldjoy1dat
-        move.b d1,_oldjoy1dat+2
+        cmp.b    _oldjoy1dat,d2
+        jbeq     joy1done
 
-        eor.b #0x80,d1
+        move.b   d2,_oldjoy1dat
 
-        move.w d2,d0
-        lsl.w #1,d0
-        eor.w d2,d0
+        move.b   #0xff,d0
+        jbsr     acia_ikbd_rx
 
-        and.b #2,d0     | JOYxDAT 1 XOR 0, down -> IKBD 1, down
-        and.b #2,d2     | JOYxDAT 1, right -> ...
-        lsl.b #2,d2     |              ... -> IKBD 3, right
-        or.b  d0,d1
-        or.b  d2,d1
-
-        rol.w #7,d0
-        and.b #1,d0     | JOYxDAT 9 XOR 8, up -> IKBD 0, up
-        or.b  d0,d1
-
-        ror.w #7,d2
-        and.b #4,d2     | JOYxDAT 9, left -> IKBD 2, left
-        or.b d2,d1
-        move.b d1,d2
-
-        move.b #0xff,d0
-        jsr acia_ikbd_rx
-
-        move.b d2,d0
-        jsr acia_ikbd_rx
-
+        move.b   d2,d0
+        jbsr     acia_ikbd_rx   
+joy1done:
         rts
 
         .globl _joy0_report_off
 _joy0_report_off:
         .globl _joy1_report_off
 _joy1_report_off:
+        .globl _joy_monitor_off
+_joy_monitor_off:
+        .globl _joy_interrogate_off
+_joy_interrogate_off:
         rts
-
 #endif

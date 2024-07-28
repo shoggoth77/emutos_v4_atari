@@ -293,6 +293,8 @@ void (*mouse_report_ku_left)(void);
 void (*mouse_report_ku_right)(void);
 void (*joy0_report)(void);
 void (*joy1_report)(void);
+void (*joy_monitor)(void);
+void (*joy_interrogate)(void);
 extern void mouse_report_relative(void);
 extern void mouse_report_absolute(void);
 extern void mouse_report_0x74(void);
@@ -304,6 +306,10 @@ extern void joy0_report_event(void);
 extern void joy1_report_event(void);
 extern void joy0_report_off(void);
 extern void joy1_report_off(void);
+extern void joy_monitor_off(void);
+extern void joy_monitor_on(void);
+extern void joy_interrogate_off(void);
+extern void joy_interrogate_on(void);
 #endif
 
 /******************************************************************************/
@@ -2253,7 +2259,16 @@ static void amiga_ikbd_simulate_writeb(UBYTE b)
         break;
 
         case 0x0d: /* INTERROGATE MOUSE POSITION */
-            mouse_report_absolute();
+            mouse_report_absolute(); // we could be interrupted TBD!!! SR 2700??
+            break;
+
+        case 0x16: /* JOYSTICK INTERROGATE */
+            joy_interrogate = joy_interrogate_on;
+            break;
+
+        case 0x17:
+            joy_monitor = joy_monitor_on;
+            break;
 
         case 0x80:
             if(buffer[1] == 0x01)
@@ -2266,6 +2281,12 @@ static void amiga_ikbd_simulate_writeb(UBYTE b)
                 mouseymax = 200;
                 mousex = mousexmax>>1;
                 mousey = mouseymax>>1;
+
+                mouse_report_mv = mouse_report_relative;
+                joy_monitor = joy_monitor_off;
+                joy_interrogate = joy_interrogate_off;
+                joy0_report = joy0_report_off;
+                joy1_report = joy1_report_event;
                 mouse_report_kd_left  = mouse_report_none;
                 mouse_report_kd_right = mouse_report_none;
                 mouse_report_ku_left  = mouse_report_none;
@@ -2318,14 +2339,18 @@ static void amiga_ikbd_simulate_writeb(UBYTE b)
         mouse_events_disabled = FALSE;
     break;
 
+    case 0x17: /* SET JOYSTICK MONITORING */
+    case 0x18: /* SET FIRE BUTTON MONITORING */
+        mouse_events_disabled = TRUE;
+        joysticks_events_disabled = TRUE;
+    break;
+
     case 0x1a: /* DISABLE JOYSTICKS */
+    case 0x15: /* SET JOYSTICK INTERROGATION MODE */
         joysticks_events_disabled = TRUE;
     break;
 
     case 0x14: /* SET JOYSTICK EVENT REPORTING */
-    case 0x15: /* SET JOYSTICK INTERROGATION MODE */
-    case 0x17: /* SET JOYSTICK MONITORING */
-    case 0x18: /* SET FIRE BUTTON MONITORING */
     case 0x19: /* SET JOYSTICK KEYCODE MODE */
         joysticks_events_disabled = FALSE;
     break;
@@ -2580,6 +2605,8 @@ const UBYTE scancode_atari_from_amiga[128] =
 void amiga_init_keyboard_interrupt(void)
 {
     mouse_report_mv = mouse_report_relative;
+    joy_monitor = joy_monitor_off;
+    joy_interrogate = joy_interrogate_off;
     joy0_report = joy0_report_off;
     joy1_report = joy1_report_event;
     mouse_report_kd_left = mouse_report_none;
