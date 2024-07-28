@@ -1386,10 +1386,29 @@ WORD vsetmode(WORD mode)
 		switch(mode & VIDEL_BPPMASK)
 		{
 			default:
-			case VIDEL_1BPP: SAGA_SET_VIDEO_MODE = 0x0400 | SAGA_VIDEO_FORMAT_STHIGH; break;
-			case VIDEL_2BPP: SAGA_SET_VIDEO_MODE = 0x1000 | SAGA_VIDEO_FORMAT_STMID; break;
-			case VIDEL_4BPP: SAGA_SET_VIDEO_MODE = (mode & VIDEL_80COL) ? (0x0500 | SAGA_VIDEO_FORMAT_STLOW) : (0x0100 | SAGA_VIDEO_FORMAT_STLOW); break;
-            case VIDEL_8BPP: SAGA_SET_VIDEO_MODE = 0x0300 | SAGA_VIDEO_FORMAT_TTLOW; break;
+			case VIDEL_1BPP:
+                SAGA_SET_VIDEO_MODE = 0x0400 | SAGA_VIDEO_FORMAT_STHIGH;
+                //(*(volatile UWORD*)0xffff8260) = 2; // doesn't work yet
+                break;
+
+			case VIDEL_2BPP:
+                SAGA_SET_VIDEO_MODE = 0x1000 | SAGA_VIDEO_FORMAT_STMID;
+                //(*(volatile UWORD*)0xffff8260) = 1; // doesn't work yet
+                break;
+
+			case VIDEL_4BPP:
+                if(mode & VIDEL_80COL)
+                    SAGA_SET_VIDEO_MODE = (0x0500 | SAGA_VIDEO_FORMAT_STLOW);
+                else
+                {
+                    //SAGA_SET_VIDEO_MODE = (0x0100 | SAGA_VIDEO_FORMAT_STLOW);
+                    (*(volatile UWORD*)0xffff8260) = 0;
+                }
+                break;
+
+            case VIDEL_8BPP:
+                SAGA_SET_VIDEO_MODE = 0x0300 | SAGA_VIDEO_FORMAT_TTLOW;
+                break;
 		}
 
         return prev_modecode;
