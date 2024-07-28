@@ -984,7 +984,9 @@ static void atari_setrez(WORD rez, WORD videlmode)
         *(volatile UBYTE *)ST_SHIFTER = sshiftmod = rez;
     }
 }
+#endif /* CONF_WITH_ATARI_VIDEO */
 
+#if CONF_WITH_ATARI_VIDEO || CONF_WITH_APOLLO_68080
 static WORD atari_setcolor(WORD colorNum, WORD color)
 {
     WORD oldcolor;
@@ -996,7 +998,7 @@ static WORD atari_setcolor(WORD colorNum, WORD color)
 
     colorNum &= 0x000f;         /* just like real TOS */
 
-    if (HAS_VIDEL || HAS_TT_SHIFTER || HAS_STE_SHIFTER)
+    if (HAS_VIDEL || HAS_TT_SHIFTER || HAS_STE_SHIFTER || CONF_WITH_APOLLO_68080)
         mask = 0x0fff;
     else
         mask = 0x0777;
@@ -1007,8 +1009,7 @@ static WORD atari_setcolor(WORD colorNum, WORD color)
 
     return oldcolor;
 }
-
-#endif /* CONF_WITH_ATARI_VIDEO */
+#endif /* CONF_WITH_ATARI_VIDEO || CONF_WITH_APOLLO_68080 */
 
 /* hardware independent xbios routines */
 
@@ -1144,9 +1145,10 @@ void setpalette(const UWORD *palettePtr)
  */
 WORD setcolor(WORD colorNum, WORD color)
 {
-#ifdef MACHINE_AMIGA
+
+#if defined(MACHINE_AMIGA) && !CONF_WITH_APOLLO_68080
     return amiga_setcolor(colorNum, color);
-#elif CONF_WITH_ATARI_VIDEO
+#elif CONF_WITH_ATARI_VIDEO || CONF_WITH_APOLLO_68080
     return atari_setcolor(colorNum, color);
 #else
     /* No hardware, fake return value */
